@@ -87,6 +87,9 @@ header.app h1{margin:0;font-size:1.25rem;font-weight:700;letter-spacing:-.01em}
 .tabs button{font:inherit;font-size:.9rem;font-weight:600;border:0;background:none;color:var(--muted);padding:8px 14px;border-radius:7px;cursor:pointer;white-space:nowrap}
 .tabs button[aria-selected=true]{background:var(--accent);color:var(--accent-fg)}
 .tab{display:grid;gap:20px}
+.subtabs{display:flex;gap:18px;border-bottom:1px solid var(--line);overflow-x:auto}
+.subtabs button{font:inherit;font-size:.92rem;font-weight:600;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:6px 2px 9px;margin-bottom:-1px;cursor:pointer;white-space:nowrap}
+.subtabs button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
 .intro .tabtitle{margin:0;font-size:1.55rem;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
 .intro p{margin:4px 0 0;color:var(--muted);max-width:62ch}
 .grid.wide{grid-template-columns:minmax(0,1fr) minmax(0,460px)}
@@ -130,7 +133,11 @@ select,input[type=time]{width:100%;font:inherit;color:var(--fg);background:var(-
   </div>
 
 
-  <div class="grid">
+  <nav class="subtabs" aria-label="Secciones RFQ">
+    <button type="button" data-sub="excel" aria-selected="true">Formulario y Excel</button>
+    <button type="button" data-sub="mail" aria-selected="false">Correo al equipo</button>
+  </nav>
+  <div class="grid" id="rfq-excel">
     <form id="rfq" autocomplete="off" novalidate>
       <fieldset>
         <legend>Oportunidad</legend>
@@ -274,6 +281,50 @@ select,input[type=time]{width:100%;font:inherit;color:var(--fg);background:var(-
           <div class="btns"><button type="button" class="btn" id="cancelNew">Cancelar</button><button type="button" class="btn primary" id="okNew">Borrar todo</button></div>
         </div>
         <span class="hint">El borrador se guarda en este navegador mientras trabajas. "Abrir RFQ" carga un Excel ya diligenciado para corregirlo.</span>
+      </div>
+    </aside>
+  </div>
+  <div class="grid wide" id="rfq-mail" hidden>
+    <form id="rfqMail" autocomplete="off" novalidate>
+      <fieldset>
+        <legend>Datos del correo</legend>
+        <p class="hint" style="margin:0">El correo toma el nombre de la oportunidad, el alcance, el tipo de oferta y los plazos del formulario. Aquí solo completas lo que no está en el Excel.</p>
+        <div class="row">
+          <div class="f"><label for="mCliente">Cliente</label><input type="text" id="mCliente" list="lg-dl-clientes" placeholder="Nombre del cliente"></div>
+        </div>
+        <div class="row">
+          <div class="f"><label for="mFechaLimite">Fecha límite de entrega al cliente</label><input type="date" id="mFechaLimite"></div>
+          <div class="f"><label for="mHora">Hora límite</label><input type="time" id="mHora"></div>
+        </div>
+        <div class="hint">Es la misma fecha del plazo para presentar la oferta (celda I12 del Excel): si la cambias aquí, también cambia en el formulario.</div>
+        <div class="f">
+          <span class="lbl">La RFQ va</span>
+          <div class="chips">
+            <label class="chip"><input type="radio" name="mEnvio" value="adjunto"><span>Adjunta al correo</span></label>
+            <label class="chip"><input type="radio" name="mEnvio" value="compartido"><span>Compartida por enlace o carpeta</span></label>
+          </div>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Opcional</legend>
+        <div class="f">
+          <label for="mNota">Nota adicional <span class="hint">aparece antes del cierre</span></label>
+          <textarea id="mNota" rows="2" placeholder="Indicaciones adicionales para el equipo"></textarea>
+        </div>
+      </fieldset>
+    </form>
+    <aside>
+      <div class="out">
+        <div class="kv">
+          <div class="top"><span>Asunto</span><button type="button" class="copy" id="mCopyAsunto">Copiar</button></div>
+          <div class="mono" id="mAsunto"></div>
+        </div>
+        <div class="kv">
+          <div class="top"><span>Correo</span></div>
+          <div class="mail" id="mPreview"></div>
+        </div>
+        <button type="button" class="btn primary" id="mCopy">Copiar correo</button>
+        <div class="msg" id="mStatus" hidden></div>
       </div>
     </aside>
   </div>
@@ -439,7 +490,7 @@ document.querySelectorAll("[data-yn]").forEach(el=>{const k=el.dataset.yn;["Si",
 // permitir desmarcar radios con un segundo clic
 document.querySelectorAll('input[type=radio]').forEach(r=>{r.addEventListener("pointerdown",()=>{r.dataset.was=r.checked?"1":""});r.addEventListener("click",()=>{if(r.dataset.was){r.checked=false;r.dataset.was="";update()}})});
 
-const SIMPLE=["nombre","fechaLlegada","consecutivo","asuntoCorreo","dirigidaNombre","dirigidaCorreo","asuntoOferta","alcance","portal","plazoPreguntas","plazoOferta","recomendaciones","marcas","entrega","formaPago","otros"];
+const SIMPLE=["nombre","fechaLlegada","consecutivo","asuntoCorreo","dirigidaNombre","dirigidaCorreo","asuntoOferta","alcance","portal","plazoPreguntas","plazoOferta","recomendaciones","marcas","entrega","formaPago","otros","mCliente","mHora","mNota"];
 function collect(){
   const d={};SIMPLE.forEach(k=>d[k]=$(k).value);
   d.preguntasAbierto=$("preguntasAbierto").checked;
@@ -447,6 +498,7 @@ function collect(){
   const r=n=>(document.querySelector(`input[name=${n}]:checked`)||{}).value||"";
   d.tipo=r("tipo");d.moneda=r("moneda");Object.keys(YN).forEach(k=>d[k]=r(k));
   d._auto={};Object.keys(AUTO_FIELDS).forEach(k=>d._auto[k]=$(k).dataset.auto==="1");
+  d.mEnvio=(document.querySelector("input[name=mEnvio]:checked")||{}).value||"adjunto";
   return d;
 }
 function apply(d){
@@ -456,6 +508,7 @@ function apply(d){
   const setR=(n,v)=>document.querySelectorAll(`input[name=${n}]`).forEach(i=>i.checked=i.value===v);
   setR("tipo",d.tipo);setR("moneda",d.moneda);Object.keys(YN).forEach(k=>setR(k,d[k]));
   Object.keys(AUTO_FIELDS).forEach(k=>$(k).dataset.auto=(d._auto?d._auto[k]!==false:!d[k])?"1":"");
+  document.querySelectorAll("input[name=mEnvio]").forEach(i=>i.checked=i.value===(d.mEnvio||"adjunto"));
   update();
 }
 function update(){
@@ -472,6 +525,7 @@ function update(){
   $("checklist").innerHTML="";checks.forEach(([t,ok])=>{const li=document.createElement("li");li.textContent=t;if(!ok)li.className="miss";$("checklist").append(li)});
   $("download").disabled=!(d.nombre.trim()&&d.fechaLlegada);
   try{localStorage.setItem(STORE,JSON.stringify(d))}catch(e){}
+  if(window.renderRfqMail)window.renderRfqMail(d);
   return d;
 }
 const form=$("rfq");
@@ -772,6 +826,64 @@ apply(lsGet(KEY,null)||blank());
   tabs.forEach(t=>t.addEventListener("click",()=>{show(t.dataset.tab);try{history.replaceState(null,"","#"+t.dataset.tab)}catch(e){}}));
   let start=(location.hash||"").slice(1);if(!start){try{start=localStorage.getItem("tab-v1")||""}catch(e){}}
   show(start||"rfq");
+})();
+</script>
+<script>
+/* ---------- RFQ: correo al equipo ---------- */
+(function(){
+const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const DIAS=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const larga=s=>{const p=parseISO(s);if(!p)return"";const d=new Date(p.y,p.m-1,p.d);return `${DIAS[d.getDay()]} ${p.d} de ${MESES[p.m-1]} de ${p.y}`};
+const corta=s=>{const p=parseISO(s);return p?`${pad(p.d)}/${pad(p.m)}/${p.y}`:""};
+const hora=t=>{const m=/^(\d{2}):(\d{2})$/.exec(t||"");if(!m)return"";let h=+m[1];const ap=h>=12?"p. m.":"a. m.";h=h%12||12;return `${h}:${m[2]} ${ap}`};
+const noDot=s=>(s||"").trim().replace(/[.\s]+$/,"");
+const lc=s=>s&&s.length>1&&s[1]===s[1].toLowerCase()?s[0].toLowerCase()+s.slice(1):s;
+function build(d){
+  const B=[];const P=text=>B.push({t:"p",text});
+  const cli=(d.mCliente||"").trim(),nom=(d.nombre||"").trim();
+  P("Buen día, equipo:");
+  let s;
+  if(d.tipo==="Licitación")s="Agradezco su colaboración con la elaboración de la oferta para el proceso de licitación"+(cli?` de ${cli}`:"");
+  else s="Agradezco su colaboración con la elaboración de la oferta"+(d.tipo?" "+d.tipo.toLowerCase():"")+(cli?` para ${cli}`:"");
+  const alc=noDot(d.alcance)||nom;
+  P(s+(nom&&!alc?`, correspondiente a la oportunidad “${nom}”.`:"."));
+  if(alc)P(`El cliente solicita ${lc(alc)}, por lo que agradezco su apoyo con la revisión de los requerimientos y la preparación de la propuesta.`);
+  P((d.mEnvio==="compartido"?"Comparto":"Adjunto")+" la RFQ con la información y los requerimientos suministrados por el cliente, para que sean tenidos en cuenta en la elaboración de la oferta.");
+  const lim=d.plazoOferta?`${larga(d.plazoOferta)}${d.mHora?` a las ${hora(d.mHora)}`:""}`:"";
+  let f="Agradezco su apoyo con esta solicitud";
+  f+=lim?`, teniendo en cuenta que la fecha límite para presentar la oferta al cliente es el ${lim}`:"";
+  f=f.replace(/\.$/,"")+".";
+  P(f);
+  (d.mNota||"").split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean).forEach(P);
+  P("Quedo atento a cualquier inquietud o información adicional que requieran.");
+  P("Cordialmente,");
+  return B;
+}
+window.renderRfqMail=function(d){
+  if(typeof LG==="undefined")return;
+  $("mAsunto").textContent=d.asuntoCorreo||"—";
+  $("mPreview").innerHTML=LG.toHTML(build(d));
+  if(document.activeElement!==$("mFechaLimite"))$("mFechaLimite").value=d.plazoOferta||"";
+};
+window.rfqMailBuild=build;
+const mf=$("rfqMail");
+const syncFecha=e=>{if(e.target.id==="mFechaLimite")$("plazoOferta").value=e.target.value;update()};
+mf.addEventListener("input",syncFecha);mf.addEventListener("change",syncFecha);mf.addEventListener("submit",e=>e.preventDefault());
+function status(t,warn){const s=$("mStatus");s.textContent=t;s.className="msg"+(warn?" warn":"");s.hidden=!t;if(t&&!warn)setTimeout(()=>{if(s.textContent===t)s.hidden=true},3500)}
+function sel(el){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r)}
+$("mCopy").addEventListener("click",()=>{
+  const d=update();const B=build(d);const html=LG.toHTML(B),text=LG.toText(B);
+  const fb=()=>{try{navigator.clipboard.writeText(text).then(()=>status("Correo copiado como texto simple."),()=>{sel($("mPreview"));status("El correo quedó seleccionado: usa Ctrl+C.",true)})}catch(e){sel($("mPreview"));status("El correo quedó seleccionado: usa Ctrl+C.",true)}};
+  try{if(window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write)navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([html],{type:"text/html"}),"text/plain":new Blob([text],{type:"text/plain"})})]).then(()=>status("Correo copiado. Pégalo en el cuerpo del correo."),fb);else fb()}catch(e){fb()}
+});
+$("mCopyAsunto").addEventListener("click",()=>{const b=$("mCopyAsunto"),t=$("mAsunto").textContent;try{navigator.clipboard.writeText(t).then(()=>{b.textContent="Copiado";setTimeout(()=>b.textContent="Copiar",1400)},()=>sel($("mAsunto")))}catch(e){sel($("mAsunto"))}});
+// sub-pestañas
+const subs=[...document.querySelectorAll("[data-sub]")];
+function showSub(n){$("rfq-excel").hidden=n!=="excel";$("rfq-mail").hidden=n!=="mail";subs.forEach(b=>b.setAttribute("aria-selected",b.dataset.sub===n?"true":"false"));try{localStorage.setItem("rfq-sub-v1",n)}catch(e){}}
+subs.forEach(b=>b.addEventListener("click",()=>showSub(b.dataset.sub)));
+let s0="excel";try{s0=localStorage.getItem("rfq-sub-v1")||"excel"}catch(e){}
+showSub(s0);
+update();
 })();
 </script>
 
